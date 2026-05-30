@@ -23,7 +23,7 @@ jobs:
         env:
           GRIST_API_KEY: ${{ secrets.GRIST_API_KEY }}
           GRIST_SERVER: ${{ secrets.GRIST_SERVER }}
-          GRIST_DOC_1_ID: ${{ secrets.GRIST_DOC_2_ID }}
+          GRIST_DOC_1_ID: ${{ secrets.GRIST_DOC_1_ID }}
         run: python sync_publics.py
 
       - name: Lancer la sync Grist → MySQL
