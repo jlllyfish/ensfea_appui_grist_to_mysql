@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GRIST_URL = os.getenv("GRIST_SERVER") + "/api"
-DOC_ID = os.getenv("GRIST_DOC_2_ID")
+DOC_ID = os.getenv("GRIST_DOC_1_ID")
 headers = {
     "Authorization": f"Bearer {os.getenv('GRIST_API_KEY')}",
     "Content-Type": "application/json",
