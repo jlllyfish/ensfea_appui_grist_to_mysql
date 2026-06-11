@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------ #
 
 KEY_COLUMNS: dict[str, str] = {
-    "Tableau_recap_stage": "id_stage",
-    "Publics": "UUID",
+    "Catalogue_2026_2027": "id_stage",
+    "Publics_2026_2027": "UUID",
 }
 
 
