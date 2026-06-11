@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GRIST_URL = os.getenv("GRIST_SERVER") + "/api"
-DOC_ID = os.getenv("GRIST_DOC_1_ID")
+DOC_ID = os.getenv("GRIST_DOC_2_ID")
 headers = {
     "Authorization": f"Bearer {os.getenv('GRIST_API_KEY')}",
     "Content-Type": "application/json",
@@ -27,6 +27,7 @@ def add_records(table, records):
         json={"records": records},
         headers=headers,
     )
+    print(f"[DEBUG] {r.status_code} {r.text[:300]}")
     r.raise_for_status()
     print(f"{len(records)} lignes ajoutées dans {table}")
 
@@ -41,16 +42,19 @@ def delete_records(table, ids):
     print(f"{len(ids)} lignes supprimées dans {table}")
 
 
-# 1. Lire Tableau_recap_stage
-rows = get_records("Tableau_recap_stage")
+# 1. Lire Catalogue_2026_2027
+rows = get_records("Catalogue_2026_2027")
 
 # 2. Calculer l'état cible (id_stage, public)
 cible = []
 for row in rows:
     id_stage = row["id"]
-    valeurs = row["fields"].get("Public", "") or ""
-    for val in valeurs.split(","):
-        val = val.strip()
+    valeurs = row["fields"].get("Public", "") or []
+    if isinstance(valeurs, str):
+        valeurs = [v.strip() for v in valeurs.split(",") if v.strip()]
+    elif isinstance(valeurs, list) and valeurs and valeurs[0] == "L":
+        valeurs = valeurs[1:]
+    for val in valeurs:
         if val:
             cible.append((id_stage, val))
 
@@ -60,7 +64,7 @@ cible_set = set(cible)
 existants = get_records("Publics")
 existant_index = {}  # (id_stage, public) -> grist_id
 for rec in existants:
-    key = (rec["fields"].get("id_stage"), rec["fields"].get("public"))
+    key = (rec["fields"].get("id_stage"), rec["fields"].get("Public"))
     existant_index[key] = rec["id"]
 
 existant_set = set(existant_index.keys())
@@ -81,6 +85,6 @@ if a_supprimer:
 # 6. Ajouter les nouveaux
 if a_ajouter:
     records = [
-        {"fields": {"id_stage": id_stage, "public": pub}} for id_stage, pub in a_ajouter
+        {"fields": {"id_stage": id_stage, "Public": pub}} for id_stage, pub in a_ajouter
     ]
     add_records("Publics", records)
