@@ -27,7 +27,6 @@ def add_records(table, records):
         json={"records": records},
         headers=headers,
     )
-    print(f"[DEBUG] {r.status_code} {r.text[:300]}")
     r.raise_for_status()
     print(f"{len(records)} lignes ajoutées dans {table}")
 
@@ -60,8 +59,8 @@ for row in rows:
 
 cible_set = set(cible)
 
-# 3. Lire l'état actuel de Publics
-existants = get_records("Publics")
+# 3. Lire l'état actuel de Publics_2026_2027
+existants = get_records("Publics_2026_2027")
 existant_index = {}  # (id_stage, public) -> grist_id
 for rec in existants:
     key = (rec["fields"].get("id_stage"), rec["fields"].get("Public"))
@@ -80,11 +79,11 @@ print(
 # 5. Supprimer les obsolètes
 if a_supprimer:
     ids_a_supprimer = [existant_index[key] for key in a_supprimer]
-    delete_records("Publics", ids_a_supprimer)
+    delete_records("Publics_2026_2027", ids_a_supprimer)
 
 # 6. Ajouter les nouveaux
 if a_ajouter:
     records = [
         {"fields": {"id_stage": id_stage, "Public": pub}} for id_stage, pub in a_ajouter
     ]
-    add_records("Publics", records)
+    add_records("Publics_2026_2027", records)
