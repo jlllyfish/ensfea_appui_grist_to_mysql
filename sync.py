@@ -26,10 +26,10 @@ KEY_COLUMNS: dict[str, str] = {
     "Retours_Tally_new": "submission_id",
     "Users_instance_dev": "id_bdd",
     "Formulaire_contact_OTP": "Email",
-    "Catalogue_2026_2027": "id_stage",
-    "Publics_2026_2027": "UUID",
-    "Statuts_2026_2027": "UUID",
-    "Disciplines_2026_2027": "UUID",
+    "Catalogue_2026_2027": "UUID_catalogue",
+    "Publics_2026_2027": "UUID_publics",
+    "Statuts_2026_2027": "UUID_statuts",
+    "Disciplines_2026_2027": "UUID_disciplines",
 }
 
 # ------------------------------------------------------------------ #
@@ -218,6 +218,17 @@ class GristMySQLSyncer:
 
         # Exécution
         with self.engine.begin() as conn:
+            if to_delete:
+                try:
+                    for chunk in self._chunks(to_delete):
+                        ids = ", ".join(str(i) for i in chunk)
+                        conn.execute(
+                            text(f"DELETE FROM `{table.id}` WHERE grist_id IN ({ids})")
+                        )
+                    result.deleted = len(to_delete)
+                except SQLAlchemyError as e:
+                    result.errors.append(f"Delete échoué : {e}")
+
             if to_insert:
                 try:
                     cols = list(to_insert[0].keys())
@@ -240,17 +251,6 @@ class GristMySQLSyncer:
                     result.updated = len(to_update)
                 except SQLAlchemyError as e:
                     result.errors.append(f"Update échoué : {e}")
-
-            if to_delete:
-                try:
-                    for chunk in self._chunks(to_delete):
-                        ids = ", ".join(str(i) for i in chunk)
-                        conn.execute(
-                            text(f"DELETE FROM `{table.id}` WHERE grist_id IN ({ids})")
-                        )
-                    result.deleted = len(to_delete)
-                except SQLAlchemyError as e:
-                    result.errors.append(f"Delete échoué : {e}")
 
         # skipped est incrémenté au fil de la comparaison
         return result
