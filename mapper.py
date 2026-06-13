@@ -57,7 +57,11 @@ def cast_value(value, grist_type: str):
     if isinstance(value, list) and value and value[0] == "L":
         value = value[1:]
 
-    if base_type in ("ChoiceList", "RefList", "Attachments"):
+    if base_type == "ChoiceList":
+        lst = value if isinstance(value, list) else [value]
+        return ", ".join(str(v) for v in lst if v)
+
+    if base_type in ("RefList", "Attachments"):
         import json
 
         lst = value if isinstance(value, list) else [value]
