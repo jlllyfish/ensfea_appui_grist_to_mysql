@@ -7,15 +7,13 @@ import logging
 import sys
 from dataclasses import dataclass, field
 
-from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
-
 from config import Config
 from grist_client import GristClient
-from reader import GristReader
-from mysql_writer import create_mysql_engine
 from mapper import cast_value
-from mysql_writer import _safe_col_name
+from mysql_writer import _safe_col_name, create_mysql_engine
+from reader import GristReader
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +22,20 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------ #
 
 KEY_COLUMNS: dict[str, str] = {
+    "Tally_old": "submission_id",
+    "Retours_Tally_new": "submission_id",
+    "Users_instance_dev": "id_bdd",
+    "Formulaire_contact_OTP": "Email",
     "Catalogue_2026_2027": "id_stage",
     "Publics_2026_2027": "UUID",
+    "Statuts_2026_2027": "UUID",
+    "Disciplines_2026_2027": "UUID",
 }
-
 
 # ------------------------------------------------------------------ #
 # Rapport                                                              #
 # ------------------------------------------------------------------ #
+
 
 @dataclass
 class TableSyncResult:
@@ -49,10 +53,14 @@ class TableSyncResult:
     def log(self):
         status = "✅" if self.success else "❌"
         parts = []
-        if self.inserted: parts.append(f"🟢 +{self.inserted} insérés")
-        if self.updated:  parts.append(f"🔵 ~{self.updated} modifiés")
-        if self.deleted:  parts.append(f"🔴 -{self.deleted} supprimés")
-        if self.skipped:  parts.append(f"⚪ ={self.skipped} inchangés")
+        if self.inserted:
+            parts.append(f"🟢 +{self.inserted} insérés")
+        if self.updated:
+            parts.append(f"🔵 ~{self.updated} modifiés")
+        if self.deleted:
+            parts.append(f"🔴 -{self.deleted} supprimés")
+        if self.skipped:
+            parts.append(f"⚪ ={self.skipped} inchangés")
         summary = "  ".join(parts) if parts else "⚪ aucun changement"
         logger.info("%s  %-30s  %s", status, self.table_id, summary)
         for err in self.errors:
@@ -84,6 +92,7 @@ class SyncReport:
 # Syncer                                                               #
 # ------------------------------------------------------------------ #
 
+
 class GristMySQLSyncer:
     CHUNK_SIZE = 500
 
@@ -97,13 +106,16 @@ class GristMySQLSyncer:
 
         tables = (
             [t for t in all_tables if t.id in tables_to_sync]
-            if tables_to_sync else all_tables
+            if tables_to_sync
+            else all_tables
         )
 
         for table in tables:
             key_col = KEY_COLUMNS.get(table.id)
             if not key_col:
-                logger.warning("Table %s ignorée : aucune clé dans KEY_COLUMNS", table.id)
+                logger.warning(
+                    "Table %s ignorée : aucune clé dans KEY_COLUMNS", table.id
+                )
                 continue
             result = self._sync_table(table, key_col)
             report.results.append(result)
@@ -141,24 +153,39 @@ class GristMySQLSyncer:
             with self.engine.connect() as conn:
                 existing_cols = {
                     row[0]
-                    for row in conn.execute(text(f"SHOW COLUMNS FROM `{table.id}`")).fetchall()
+                    for row in conn.execute(
+                        text(f"SHOW COLUMNS FROM `{table.id}`")
+                    ).fetchall()
                 }
             for col in table.columns:
                 safe = _safe_col_name(col.id)
                 if safe not in existing_cols:
                     from mapper import grist_type_to_sqla
+
                     sqla_col = grist_type_to_sqla(col.type, safe)
-                    col_type_sql = str(sqla_col.type.compile(dialect=self.engine.dialect))
+                    col_type_sql = str(
+                        sqla_col.type.compile(dialect=self.engine.dialect)
+                    )
                     with self.engine.begin() as conn:
-                        conn.execute(text(f"ALTER TABLE `{table.id}` ADD COLUMN `{safe}` {col_type_sql}"))
+                        conn.execute(
+                            text(
+                                f"ALTER TABLE `{table.id}` ADD COLUMN `{safe}` {col_type_sql}"
+                            )
+                        )
                     logger.info("🆕 Colonne ajoutée : %s.%s", table.id, safe)
         except SQLAlchemyError as e:
-            logger.warning("Détection nouvelles colonnes échouée pour %s : %s", table.id, e)
+            logger.warning(
+                "Détection nouvelles colonnes échouée pour %s : %s", table.id, e
+            )
 
         # Charger tous les champs cible pour comparaison
         try:
             with self.engine.connect() as conn:
-                all_rows = conn.execute(text(f"SELECT * FROM `{table.id}`")).mappings().fetchall()
+                all_rows = (
+                    conn.execute(text(f"SELECT * FROM `{table.id}`"))
+                    .mappings()
+                    .fetchall()
+                )
             target_fields_by_grist_id = {row["grist_id"]: dict(row) for row in all_rows}
         except SQLAlchemyError as e:
             result.errors.append(f"Lecture champs MySQL échouée : {e}")
@@ -174,7 +201,12 @@ class GristMySQLSyncer:
             else:
                 grist_id = src_rec["id"]
                 tgt = target_fields_by_grist_id.get(grist_id, {})
-                diff = {k: v for k, v in fields.items() if str(tgt.get(k, "")) != str(v) if v is not None}
+                diff = {
+                    k: v
+                    for k, v in fields.items()
+                    if str(tgt.get(k, "")) != str(v)
+                    if v is not None
+                }
                 if diff:
                     to_update.append({"grist_id": grist_id, **diff})
                 else:
@@ -213,7 +245,9 @@ class GristMySQLSyncer:
                 try:
                     for chunk in self._chunks(to_delete):
                         ids = ", ".join(str(i) for i in chunk)
-                        conn.execute(text(f"DELETE FROM `{table.id}` WHERE grist_id IN ({ids})"))
+                        conn.execute(
+                            text(f"DELETE FROM `{table.id}` WHERE grist_id IN ({ids})")
+                        )
                     result.deleted = len(to_delete)
                 except SQLAlchemyError as e:
                     result.errors.append(f"Delete échoué : {e}")
@@ -224,12 +258,13 @@ class GristMySQLSyncer:
     def _chunks(self, items, size=None):
         size = size or self.CHUNK_SIZE
         for i in range(0, len(items), size):
-            yield items[i: i + size]
+            yield items[i : i + size]
 
 
 # ------------------------------------------------------------------ #
 # Point d'entrée                                                       #
 # ------------------------------------------------------------------ #
+
 
 def main():
     if not KEY_COLUMNS:
