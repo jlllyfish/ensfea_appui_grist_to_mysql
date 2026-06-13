@@ -12,6 +12,15 @@ headers = {
     "Content-Type": "application/json",
 }
 
+SOURCE_TABLE = "Catalogue_2026_2027"
+
+# (colonne source, table cible, nom du champ valeur dans la table cible)
+SYNC_CONFIG = [
+    ("Public", "Publics_2026_2027", "Public"),
+    ("Statut", "Statuts_2026_2027", "Statut"),
+    ("Discipline", "Disciplines_2026_2027", "Discipline"),
+]
+
 
 def get_records(table):
     r = requests.get(
@@ -41,49 +50,54 @@ def delete_records(table, ids):
     print(f"{len(ids)} lignes supprimées dans {table}")
 
 
-# 1. Lire Catalogue_2026_2027
-rows = get_records("Catalogue_2026_2027")
+def extract_values(raw):
+    """Gère valeurs Text (CSV) ou ChoiceList (["L", v1, v2, ...])."""
+    if isinstance(raw, str):
+        return [v.strip() for v in raw.split(",") if v.strip()]
+    if isinstance(raw, list):
+        if raw and raw[0] == "L":
+            raw = raw[1:]
+        return [v for v in raw if v]
+    return []
 
-# 2. Calculer l'état cible (id_stage, public)
-cible = []
-for row in rows:
-    id_stage = row["id"]
-    valeurs = row["fields"].get("Public", "") or []
-    if isinstance(valeurs, str):
-        valeurs = [v.strip() for v in valeurs.split(",") if v.strip()]
-    elif isinstance(valeurs, list) and valeurs and valeurs[0] == "L":
-        valeurs = valeurs[1:]
-    for val in valeurs:
-        if val:
-            cible.append((id_stage, val))
 
-cible_set = set(cible)
+def sync_split_column(rows, source_col, target_table, value_field):
+    # État cible
+    cible = set()
+    for row in rows:
+        id_stage = row["id"]
+        for val in extract_values(row["fields"].get(source_col, "")):
+            cible.add((id_stage, val))
 
-# 3. Lire l'état actuel de Publics_2026_2027
-existants = get_records("Publics_2026_2027")
-existant_index = {}  # (id_stage, public) -> grist_id
-for rec in existants:
-    key = (rec["fields"].get("id_stage"), rec["fields"].get("Public"))
-    existant_index[key] = rec["id"]
+    # État actuel
+    existants = get_records(target_table)
+    existant_index = {
+        (rec["fields"].get("id_stage"), rec["fields"].get(value_field)): rec["id"]
+        for rec in existants
+    }
+    existant_set = set(existant_index.keys())
 
-existant_set = set(existant_index.keys())
+    a_ajouter = cible - existant_set
+    a_supprimer = existant_set - cible
 
-# 4. Calculer les différences
-a_ajouter = cible_set - existant_set
-a_supprimer = existant_set - cible_set
+    print(
+        f"{target_table} — à ajouter : {len(a_ajouter)}, "
+        f"à supprimer : {len(a_supprimer)}, inchangés : {len(cible & existant_set)}"
+    )
 
-print(
-    f"À ajouter : {len(a_ajouter)}, à supprimer : {len(a_supprimer)}, inchangés : {len(cible_set & existant_set)}"
-)
+    if a_supprimer:
+        delete_records(target_table, [existant_index[key] for key in a_supprimer])
 
-# 5. Supprimer les obsolètes
-if a_supprimer:
-    ids_a_supprimer = [existant_index[key] for key in a_supprimer]
-    delete_records("Publics_2026_2027", ids_a_supprimer)
+    if a_ajouter:
+        records = [
+            {"fields": {"id_stage": id_stage, value_field: val}}
+            for id_stage, val in a_ajouter
+        ]
+        add_records(target_table, records)
 
-# 6. Ajouter les nouveaux
-if a_ajouter:
-    records = [
-        {"fields": {"id_stage": id_stage, "Public": pub}} for id_stage, pub in a_ajouter
-    ]
-    add_records("Publics_2026_2027", records)
+
+# Lecture unique de la table source
+rows = get_records(SOURCE_TABLE)
+
+for source_col, target_table, value_field in SYNC_CONFIG:
+    sync_split_column(rows, source_col, target_table, value_field)
