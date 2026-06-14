@@ -17,7 +17,7 @@ SOURCE_TABLE = "Catalogue_2026_2027"
 # (colonne source, table cible, nom du champ valeur dans la table cible)
 SYNC_CONFIG = [
     ("Public", "Publics_2026_2027", "Public"),
-    ("Statut", "Statuts_2026_2027", "Statut"),
+    ("Emploi", "Emploi_2026_2027", "Emploi"),
     ("Discipline", "Disciplines_2026_2027", "Discipline"),
 ]
 
