@@ -28,7 +28,7 @@ KEY_COLUMNS: dict[str, str] = {
     "Formulaire_contact_OTP": "Email",
     "Catalogue_2026_2027": "UUID_catalogue",
     "Publics_2026_2027": "UUID_publics",
-    "Statuts_2026_2027": "UUID_statuts",
+    "Emploi_2026_2027": "UUID_emploi",
     "Disciplines_2026_2027": "UUID_disciplines",
 }
 
